@@ -12,7 +12,7 @@
         <h1>sharing resources</h1>
         <ul>
             {% for page in site.pages %}
-              {% if page.url != '/index.html' %}
+              {% if page.url contains '.html' and page.url != '/index.html' %}
             <li>
                 <a href="{{ page.url }}">{{ page.title | default: page.url }}</a>
             </li>
