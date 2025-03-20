@@ -1,1 +1,19 @@
-Hello World
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Document</title>
+    </head>
+    <body>
+        <h1>sharing resources</h1>
+        <ul>
+            {% for page in site.pages %}
+            {% if page.title and page.url != '/index.html' %}
+            <li>
+                <a href="{{ page.url }}">{{ page.title }}</a>
+            </li>
+            {% endif %}
+          {% endfor %}
+        </body>
+    </html>
