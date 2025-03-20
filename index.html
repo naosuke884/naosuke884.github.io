@@ -1,3 +1,6 @@
+---
+# YAML Front Matter
+---
 <!DOCTYPE html>
 <html lang="en">
     <head>
@@ -9,11 +12,11 @@
         <h1>sharing resources</h1>
         <ul>
             {% for page in site.pages %}
-            {% if page.title and page.url != '/index.html' %}
+              {% if page.title and page.url != '/index.html' %}
             <li>
                 <a href="{{ page.url }}">{{ page.title }}</a>
             </li>
             {% endif %}
-          {% endfor %}
+            {% endfor %}
         </body>
     </html>
