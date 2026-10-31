@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PageIndex とベクトル RAG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+Antique:wght@700;900&display=swap">
+<style>
+/* Layout: one reading column; two retrieval methods always shown side by side, color-coded (vec = blue, tree = green) */
+:root {
+  --bg: #f2f4f6;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5b6875;
+  --line: #d3d9e0;
+  --vec: #2a63c9;
+  --vec-soft: #dfe8f8;
+  --tree: #2f7a4a;
+  --tree-soft: #dcefe2;
+  --warn: #b0452b;
+  --f-display: "Zen Kaku Gothic Antique", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #19212a; --ink: #e4e9ef; --muted: #98a5b3; --line: #2e3a46;
+    --vec: #7ea6f0; --vec-soft: #1e2d48; --tree: #74c391; --tree-soft: #1b3426; --warn: #ec8a6f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #19212a; --ink: #e4e9ef; --muted: #98a5b3; --line: #2e3a46;
+  --vec: #7ea6f0; --vec-soft: #1e2d48; --tree: #74c391; --tree-soft: #1b3426; --warn: #ec8a6f;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.75; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 900; letter-spacing: .01em; }
+h2 { font-size: 22px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.vec-t { color: var(--vec); } .tree-t { color: var(--tree); }
+header { display: grid; gap: 14px; }
+.lede { max-width: 62ch; color: var(--muted); }
+.thesis { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+.thesis div { padding: 16px 18px; border-radius: 6px; min-width: 0; }
+.thesis .v { background: var(--vec-soft); } .thesis .t { background: var(--tree-soft); }
+.thesis b { font-family: var(--f-display); font-size: 18px; display: block; }
+section { display: grid; gap: 18px; }
+.sec-head { display: grid; gap: 6px; }
+
+/* stepper */
+.stepper { display: flex; flex-wrap: wrap; gap: 8px; }
+.stepper button { font: 500 13px var(--f-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.stepper button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.stepper button:focus-visible { outline: 2px solid var(--vec); outline-offset: 2px; }
+.lanes { display: grid; gap: 20px; }
+.lane { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.lane.v { border-top: 4px solid var(--vec); } .lane.t { border-top: 4px solid var(--tree); }
+.lane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.lane-head span { color: var(--muted); font-size: 13px; }
+.svgbox { overflow-x: auto; }
+.svgbox svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.steps li { font-size: 13px; line-height: 1.6; color: var(--muted); padding: 8px 10px; border-radius: 4px; transition: background .2s, color .2s; min-width: 0; }
+.steps li b { display: block; color: var(--ink); font-size: 13px; }
+.steps li .n { font-family: var(--f-mono); font-size: 11px; }
+.lane.v .steps li.now { background: var(--vec-soft); color: var(--ink); }
+.lane.t .steps li.now { background: var(--tree-soft); color: var(--ink); }
+
+/* svg styling */
+svg text { font-family: var(--f-body); fill: var(--ink); }
+svg .lbl { font-size: 11px; fill: var(--muted); }
+svg .mono { font-family: var(--f-mono); font-size: 9px; }
+svg .paper { fill: var(--surface); stroke: var(--muted); stroke-width: 1.2; }
+svg .rule { stroke: var(--line); stroke-width: 2; }
+svg .arrow { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+svg .ahead { fill: var(--muted); }
+svg .chunk { fill: var(--vec-soft); stroke: var(--vec); stroke-width: 1; }
+svg .space { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 4 3; }
+svg .dot { fill: var(--muted); opacity: .55; }
+svg .hit { fill: var(--vec); opacity: 1; }
+svg .miss { fill: var(--warn); }
+svg .q { fill: var(--ink); }
+svg .knn { fill: var(--vec-soft); fill-opacity: .55; stroke: var(--vec); stroke-width: 1.2; }
+svg .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg .node-on { fill: var(--tree-soft); stroke: var(--tree); stroke-width: 1.6; }
+svg .edge { stroke: var(--line); stroke-width: 1.4; fill: none; }
+svg .edge-on { stroke: var(--tree); stroke-width: 2.4; fill: none; }
+svg .llm { fill: var(--ink); }
+svg .llm-t { fill: var(--bg); font-family: var(--f-mono); font-size: 13px; font-weight: 500; }
+svg .vec-c { fill: var(--vec); } svg .tree-c { fill: var(--tree); } svg .warn-c { fill: var(--warn); }
+svg [data-s] { transition: opacity .25s; }
+svg .future { opacity: .12; }
+@media (prefers-reduced-motion: reduce) { svg [data-s], .steps li { transition: none; } }
+
+/* example */
+.query { font-family: var(--f-display); font-size: 18px; padding: 14px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.query small { display: block; font-family: var(--f-body); font-size: 12px; color: var(--muted); font-weight: 400; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.trace { display: grid; gap: 10px; min-width: 0; }
+.trace h3 { font-size: 15px; }
+.trace ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.trace li { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 13.5px; line-height: 1.65; }
+.trace li code { font-family: var(--f-mono); font-size: 12px; }
+.score { font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--vec); }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: 6px; }
+.tag.bad { color: var(--warn); border: 1px solid var(--warn); }
+.tag.ok { color: var(--tree); border: 1px solid var(--tree); }
+.path { font-family: var(--f-mono); font-size: 12px; color: var(--tree); }
+.verdict { font-size: 13.5px; padding: 10px 12px; border-left: 3px solid var(--muted); color: var(--muted); }
+
+/* table */
+.tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: none; }
+thead th { font-family: var(--f-display); font-size: 14px; }
+thead th:nth-child(2) { color: var(--vec); } thead th:nth-child(3) { color: var(--tree); }
+tbody th { font-weight: 500; color: var(--muted); white-space: nowrap; width: 9em; }
+
+/* choose */
+.choose { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.choose > div { padding: 18px; border-radius: 8px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.choose .v { background: var(--vec-soft); } .choose .t { background: var(--tree-soft); }
+.choose ul { margin: 0; padding-left: 1.2em; font-size: 14px; }
+.hybrid { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 8px; }
+.notes { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.notes a { color: var(--vec); }
+@media (max-width: 720px) {
+  .thesis, .pair, .choose { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr 1fr; }
+}
+</style>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="eyebrow">RAG の検索方式</p>
+  <h1>類似度で探すか、<br>目次で探すか</h1>
+  <div class="thesis">
+    <div class="v"><b class="vec-t">ベクトル RAG</b>類似度で検索。速い・安い・大量文書向き。</div>
+    <div class="t"><b class="tree-t">PageIndex</b>目次ツリーを LLM が辿る。長い 1 文書の位置特定向き。</div>
+  </div>
+</header>
+
+<section aria-labelledby="flow-h">
+  <div class="sec-head"><h2 id="flow-h">仕組み</h2></div>
+  <div class="stepper" role="group" aria-label="表示する段階">
+    <button type="button" id="st-1" data-step="1" aria-pressed="false">1. 分割</button>
+    <button type="button" id="st-2" data-step="2" aria-pressed="false">2. 索引</button>
+    <button type="button" id="st-3" data-step="3" aria-pressed="false">3. 検索</button>
+    <button type="button" id="st-4" data-step="4" aria-pressed="true">4. 回答(全体)</button>
+  </div>
+  <div class="lanes">
+    <div class="lane v">
+      <div class="lane-head"><h3 class="vec-t">ベクトル RAG</h3></div>
+      <div class="svgbox">
+      <svg viewBox="0 0 560 250" role="img" aria-label="ベクトル RAG の流れ図">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
+        <g data-s="1">
+          <rect class="paper" x="22" y="50" width="84" height="120" rx="3"/>
+          <line class="rule" x1="34" y1="70" x2="94" y2="70"/><line class="rule" x1="34" y1="84" x2="94" y2="84"/>
+          <line class="rule" x1="34" y1="98" x2="86" y2="98"/><line class="rule" x1="34" y1="112" x2="94" y2="112"/>
+          <line class="rule" x1="34" y1="126" x2="90" y2="126"/><line class="rule" x1="34" y1="140" x2="94" y2="140"/>
+          <line class="rule" x1="34" y1="154" x2="78" y2="154"/>
+          <text class="lbl" x="64" y="194" text-anchor="middle">年次報告書 300 頁</text>
+          <line class="arrow" x1="112" y1="110" x2="140" y2="110" marker-end="url(#ah)"/>
+          <rect class="chunk" x="148" y="40" width="44" height="24" rx="2"/><text class="mono" x="170" y="56" text-anchor="middle">#1</text>
+          <rect class="chunk" x="200" y="40" width="44" height="24" rx="2"/><text class="mono" x="222" y="56" text-anchor="middle">#2</text>
+          <rect class="chunk" x="148" y="72" width="44" height="24" rx="2"/><text class="mono" x="170" y="88" text-anchor="middle">#3</text>
+          <rect class="chunk" x="200" y="72" width="44" height="24" rx="2"/><text class="mono" x="222" y="88" text-anchor="middle">#4</text>
+          <rect class="chunk" x="148" y="104" width="44" height="24" rx="2"/><text class="mono" x="170" y="120" text-anchor="middle">#5</text>
+          <rect class="chunk" x="200" y="104" width="44" height="24" rx="2"/><text class="mono" x="222" y="120" text-anchor="middle">…</text>
+          <rect class="chunk" x="148" y="136" width="44" height="24" rx="2"/><text class="mono" x="170" y="152" text-anchor="middle">…</text>
+          <rect class="chunk" x="200" y="136" width="44" height="24" rx="2"/><text class="mono" x="222" y="152" text-anchor="middle">#900</text>
+          <text class="lbl" x="196" y="194" text-anchor="middle">512 トークンずつ分割</text>
+        </g>
+        <g data-s="2">
+          <line class="arrow" x1="250" y1="110" x2="276" y2="110" marker-end="url(#ah)"/>
+          <rect class="space" x="284" y="30" width="146" height="150" rx="4"/>
+          <circle class="dot" cx="300" cy="48" r="3.5"/><circle class="dot" cx="322" cy="152" r="3.5"/>
+          <circle class="dot" cx="410" cy="50" r="3.5"/><circle class="dot" cx="402" cy="162" r="3.5"/>
+          <circle class="dot" cx="306" cy="96" r="3.5"/><circle class="dot" cx="380" cy="72" r="3.5"/>
+          <circle class="dot" cx="418" cy="128" r="3.5"/><circle class="dot" cx="296" cy="168" r="3.5"/>
+          <circle class="dot" cx="345" cy="54" r="3.5"/><circle class="dot" cx="392" cy="100" r="3.5"/>
+          <circle class="dot" cx="348" cy="138" r="3.5"/><circle class="dot" cx="372" cy="158" r="3.5"/>
+          <text class="lbl" x="357" y="194" text-anchor="middle">埋め込み → ベクトル DB</text>
+        </g>
+        <g data-s="3">
+          <circle class="knn" cx="350" cy="104" r="30"/>
+          <circle class="hit" cx="336" cy="92" r="4.5"/><circle class="hit" cx="368" cy="96" r="4.5"/><circle class="miss" cx="342" cy="122" r="4.5"/>
+          <path class="q" d="M350,96 l2.4,5 5.4,.6 -4,3.7 1.1,5.3 -4.9,-2.7 -4.9,2.7 1.1,-5.3 -4,-3.7 5.4,-.6z"/>
+          <text class="lbl" x="357" y="222" text-anchor="middle">類似度の上位 k 件</text>
+        </g>
+        <g data-s="4">
+          <line class="arrow" x1="436" y1="110" x2="462" y2="110" marker-end="url(#ah)"/>
+          <rect class="llm" x="470" y="78" width="72" height="64" rx="6"/>
+          <text class="llm-t" x="506" y="115" text-anchor="middle">LLM</text>
+          <text class="lbl" x="506" y="164" text-anchor="middle">3 件で回答</text>
+        </g>
+      </svg>
+      </div>
+      <ol class="steps">
+        <li data-s="1"><span class="n">1</span><b>固定長で分割</b>章の境界を無視。文脈が切れる。</li>
+        <li data-s="2"><span class="n">2</span><b>埋め込み</b>ベクトル DB に保存。</li>
+        <li data-s="3"><span class="n">3</span><b>近傍検索</b>上位 k 件。別年度の文(赤)も混入。</li>
+        <li data-s="4"><span class="n">4</span><b>回答</b>根拠は類似度スコアのみ。</li>
+      </ol>
+    </div>
+
+    <div class="stepper" role="group" aria-label="表示する段階(PageIndex)">
+      <button type="button" id="st2-1" data-step="1" aria-pressed="false">1. 分割</button>
+      <button type="button" id="st2-2" data-step="2" aria-pressed="false">2. 索引</button>
+      <button type="button" id="st2-3" data-step="3" aria-pressed="false">3. 検索</button>
+      <button type="button" id="st2-4" data-step="4" aria-pressed="true">4. 回答(全体)</button>
+    </div>
+    <div class="lane t">
+      <div class="lane-head"><h3 class="tree-t">PageIndex</h3></div>
+      <div class="svgbox">
+      <svg viewBox="0 0 560 250" role="img" aria-label="PageIndex の流れ図">
+        <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
+        <g data-s="1">
+          <rect class="paper" x="22" y="50" width="84" height="120" rx="3"/>
+          <rect x="34" y="62" width="40" height="7" rx="1" class="tree-c"/>
+          <line class="rule" x1="40" y1="80" x2="94" y2="80"/><line class="rule" x1="40" y1="92" x2="90" y2="92"/>
+          <rect x="34" y="106" width="34" height="7" rx="1" class="tree-c"/>
+          <line class="rule" x1="40" y1="124" x2="94" y2="124"/><line class="rule" x1="40" y1="136" x2="86" y2="136"/>
+          <rect x="34" y="150" width="44" height="7" rx="1" class="tree-c"/>
+          <text class="lbl" x="64" y="194" text-anchor="middle">見出しを解析</text>
+          <line class="arrow" x1="112" y1="110" x2="140" y2="110" marker-end="url(#ah2)"/>
+        </g>
+        <g data-s="2">
+          <path class="edge" d="M290,52 L195,88"/><path class="edge" d="M290,52 L380,88"/>
+          <path class="edge" d="M290,52 L290,88"/>
+          <path class="edge" d="M290,114 L240,148"/><path class="edge" d="M290,114 L340,148"/>
+          <path class="edge" d="M240,174 L240,200"/>
+          <rect class="node" x="247" y="28" width="86" height="24" rx="4"/><text x="290" y="44" text-anchor="middle" font-size="10.5">年次報告書</text>
+          <rect class="node" x="152" y="88" width="86" height="26" rx="4"/><text x="195" y="105" text-anchor="middle" font-size="10.5">Part I 事業</text>
+          <rect class="node" x="247" y="88" width="86" height="26" rx="4"/><text x="290" y="105" text-anchor="middle" font-size="10.5">Part II 財務</text>
+          <rect class="node" x="337" y="88" width="86" height="26" rx="4"/><text x="380" y="105" text-anchor="middle" font-size="10.5">Part III 統治</text>
+          <rect class="node" x="192" y="148" width="96" height="26" rx="4"/><text x="240" y="165" text-anchor="middle" font-size="10.5">Item 7 MD&amp;A</text>
+          <rect class="node" x="294" y="148" width="96" height="26" rx="4"/><text x="342" y="165" text-anchor="middle" font-size="10.5">Item 8 財務諸表</text>
+          <rect class="node" x="192" y="200" width="96" height="26" rx="4"/><text x="240" y="217" text-anchor="middle" font-size="10.5">流動性と資本</text>
+          <text class="lbl" x="296" y="217">p.41–46・要約付き</text>
+        </g>
+        <g data-s="3">
+          <path class="edge-on" d="M290,52 L290,88"/><path class="edge-on" d="M290,114 L240,148"/><path class="edge-on" d="M240,174 L240,200"/>
+          <rect class="node-on" x="247" y="28" width="86" height="24" rx="4"/><text x="290" y="44" text-anchor="middle" font-size="10.5">年次報告書</text>
+          <rect class="node-on" x="247" y="88" width="86" height="26" rx="4"/><text x="290" y="105" text-anchor="middle" font-size="10.5">Part II 財務</text>
+          <rect class="node-on" x="192" y="148" width="96" height="26" rx="4"/><text x="240" y="165" text-anchor="middle" font-size="10.5">Item 7 MD&amp;A</text>
+          <rect class="node-on" x="192" y="200" width="96" height="26" rx="4"/><text x="240" y="217" text-anchor="middle" font-size="10.5">流動性と資本</text>
+        </g>
+        <g data-s="4">
+          <line class="arrow" x1="436" y1="110" x2="462" y2="110" marker-end="url(#ah2)"/>
+          <rect class="llm" x="470" y="78" width="72" height="64" rx="6"/>
+          <text class="llm-t" x="506" y="115" text-anchor="middle">LLM</text>
+          <text class="lbl" x="506" y="164" text-anchor="middle">p.43 付きで回答</text>
+        </g>
+      </svg>
+      </div>
+      <ol class="steps">
+        <li data-s="1"><span class="n">1</span><b>構造で分割</b>章・節単位。チャンク分割なし。</li>
+        <li data-s="2"><span class="n">2</span><b>ツリー生成</b>LLM が要約・ページ範囲付き JSON を作成。DB 不要。</li>
+        <li data-s="3"><span class="n">3</span><b>推論で探索</b>LLM が枝を選んで下る。外れたら戻る。</li>
+        <li data-s="4"><span class="n">4</span><b>回答</b>根拠は経路とページ番号。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="cmp-h">
+  <div class="sec-head"><h2 id="cmp-h">比較</h2></div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th scope="col">観点</th><th scope="col">ベクトル RAG</th><th scope="col">PageIndex</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">検索基準</th><td>類似度</td><td>LLM の推論</td></tr>
+        <tr><th scope="row">分割単位</th><td>固定長チャンク</td><td>章・節</td></tr>
+        <tr><th scope="row">基盤</th><td>埋め込みモデル + ベクトル DB</td><td>LLM + JSON ツリー</td></tr>
+        <tr><th scope="row">索引作成</th><td>埋め込みのみ</td><td>LLM で全文を要約</td></tr>
+        <tr><th scope="row">検索 1 回</th><td>ミリ秒、ほぼ無料</td><td>秒単位、LLM 課金</td></tr>
+        <tr><th scope="row">根拠</th><td>類似度スコア</td><td>経路 + ページ番号</td></tr>
+        <tr><th scope="row">相互参照</th><td>追えない</td><td>追える</td></tr>
+        <tr><th scope="row">得意</th><td>大量の短文書(FAQ・チケット・記事)</td><td>長い構造化文書(決算書・規程・契約・論文)</td></tr>
+        <tr><th scope="row">苦手</th><td>言い換え、年度・数値の取り違え</td><td>見出しなし文書、大量文書、低遅延要件</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="ch-h">
+  <div class="sec-head"><h2 id="ch-h">選び方</h2></div>
+  <div class="choose">
+    <div class="v">
+      <h3 class="vec-t">ベクトル RAG</h3>
+      <ul>
+        <li>文書が数千件以上</li>
+        <li>1 件が短く、構造なし</li>
+        <li>速度・コスト優先</li>
+      </ul>
+    </div>
+    <div class="t">
+      <h3 class="tree-t">PageIndex</h3>
+      <ul>
+        <li>長い文書内の正確な位置が必要</li>
+        <li>章立てがある</li>
+        <li>ページ番号の根拠が必要(監査・法務・金融)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</div>
+
+<script>
+(function () {
+  var buttons = document.querySelectorAll('.stepper button');
+  function show(cur) {
+    document.querySelectorAll('[data-s]').forEach(function (el) {
+      var s = Number(el.getAttribute('data-s'));
+      if (el.tagName === 'LI') {
+        el.classList.toggle('now', cur < 4 ? s === cur : false);
+      } else {
+        el.classList.toggle('future', s > cur);
+      }
+    });
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(Number(b.dataset.step) === cur)); });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { show(Number(b.dataset.step)); }); });
+  show(4);
+})();
+</script>
+</body>
+</html>
