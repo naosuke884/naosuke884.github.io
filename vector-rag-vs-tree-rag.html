@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>PageIndex とベクトル RAG</title>
+<title>ベクトル RAG とツリー RAG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+Antique:wght@700;900&display=swap">
 <style>
@@ -152,7 +152,7 @@ body{margin:0}
   <h1>類似度で探すか、<br>目次で探すか</h1>
   <div class="thesis">
     <div class="v"><b class="vec-t">ベクトル RAG</b>類似度で検索。速い・安い・大量文書向き。</div>
-    <div class="t"><b class="tree-t">PageIndex</b>目次ツリーを LLM が辿る。長い 1 文書の位置特定向き。</div>
+    <div class="t"><b class="tree-t">ツリー RAG</b>文書を目次ツリーにして LLM が辿る。長い 1 文書の位置特定向き。</div>
   </div>
 </header>
 
@@ -221,16 +221,16 @@ body{margin:0}
       </ol>
     </div>
 
-    <div class="stepper" role="group" aria-label="表示する段階(PageIndex)">
+    <div class="stepper" role="group" aria-label="表示する段階(ツリー RAG)">
       <button type="button" id="st2-1" data-step="1" aria-pressed="false">1. 分割</button>
       <button type="button" id="st2-2" data-step="2" aria-pressed="false">2. 索引</button>
       <button type="button" id="st2-3" data-step="3" aria-pressed="false">3. 検索</button>
       <button type="button" id="st2-4" data-step="4" aria-pressed="true">4. 回答(全体)</button>
     </div>
     <div class="lane t">
-      <div class="lane-head"><h3 class="tree-t">PageIndex</h3></div>
+      <div class="lane-head"><h3 class="tree-t">ツリー RAG</h3><span>例: PageIndex</span></div>
       <div class="svgbox">
-      <svg viewBox="0 0 560 250" role="img" aria-label="PageIndex の流れ図">
+      <svg viewBox="0 0 560 250" role="img" aria-label="ツリー RAG の流れ図">
         <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
         <g data-s="1">
           <rect class="paper" x="22" y="50" width="84" height="120" rx="3"/>
@@ -285,7 +285,7 @@ body{margin:0}
   <div class="sec-head"><h2 id="cmp-h">比較</h2></div>
   <div class="tbl">
     <table>
-      <thead><tr><th scope="col">観点</th><th scope="col">ベクトル RAG</th><th scope="col">PageIndex</th></tr></thead>
+      <thead><tr><th scope="col">観点</th><th scope="col">ベクトル RAG</th><th scope="col">ツリー RAG</th></tr></thead>
       <tbody>
         <tr><th scope="row">検索基準</th><td>類似度</td><td>LLM の推論</td></tr>
         <tr><th scope="row">分割単位</th><td>固定長チャンク</td><td>章・節</td></tr>
@@ -313,7 +313,7 @@ body{margin:0}
       </ul>
     </div>
     <div class="t">
-      <h3 class="tree-t">PageIndex</h3>
+      <h3 class="tree-t">ツリー RAG</h3>
       <ul>
         <li>長い文書内の正確な位置が必要</li>
         <li>章立てがある</li>
