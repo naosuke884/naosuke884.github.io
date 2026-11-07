@@ -4,109 +4,46 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RAG のしくみ</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@700&family=Zen+Kaku+Gothic+New:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
 <style>
-:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
-body { margin: 0; }
-img { max-width: 100%; }
-[hidden] { display: none !important; }
-/* Layout: one narrow column. Highlighter yellow always means "retrieved material", from the lede through the flow to the demo. The demo walks the same four steps as the flow. */
-:root {
-  --bg: #f5f7fa;
-  --surface: #ffffff;
-  --fg: #18212c;
-  --muted: #5a6676;
-  --faint: #7d8796;
-  --line: #d8dee7;
-  --accent: #2448c7;
-  --mark: #fde68a;
-  --mark-fg: #3b2f00;
-  --chip: #eef1f6;
-  --display: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
-  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #10151c; --surface: #18202a; --fg: #e4e9f0; --muted: #98a4b5; --faint: #748094; --line: #2c3745;
-    --accent: #8ea8ff; --mark: #6b5a12; --mark-fg: #fff4c2; --chip: #1c2531;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #10151c; --surface: #18202a; --fg: #e4e9f0; --muted: #98a4b5; --faint: #748094; --line: #2c3745;
-  --accent: #8ea8ff; --mark: #6b5a12; --mark-fg: #fff4c2; --chip: #1c2531;
-  color-scheme: dark;
-}
+/* Highlighter yellow always means "retrieved material", from the lede through the flow to the demo. */
+.expand { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); }
+.expand b { color: var(--fg); font-weight: 600; }
+.lede { font-size: 1.1rem; margin-top: 4px; }
 
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--body);
-  font-size: 16px;
-  line-height: 1.7;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 48px 72px;
-}
-.wrap { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
-section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-
-h1, h2 { font-family: var(--display); font-weight: 700; text-wrap: balance; line-height: 1.3; margin: 0; }
-h1 { font-size: clamp(2.2rem, 7vw, 3rem); }
-h2 { font-size: 1.3rem; }
-p { margin: 0; }
-mark { background: var(--mark); color: var(--mark-fg); padding: 0 0.15em; border-radius: 2px; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-header { display: flex; flex-direction: column; gap: 8px; }
-.expand { font-family: var(--mono); font-size: 0.88rem; color: var(--muted); }
-.expand b { color: var(--accent); font-weight: 500; }
-.lede { font-size: 1.2rem; margin-top: 8px; }
-
-/* Flow: row with → on wide screens, column with ↓ on phones */
 .steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 28px; }
-.steps li { position: relative; flex: 1 1 0; min-width: 0; display: grid; place-items: center; text-align: center; font-size: 0.92rem; font-weight: 700; line-height: 1.4; padding: 12px 8px; border-radius: 8px; background: var(--chip); }
-.steps li.hl { background: var(--mark); color: var(--mark-fg); }
-.steps li + li::before { content: "→"; position: absolute; left: -21px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 400; }
+.steps li { position: relative; flex: 1 1 0; min-width: 0; display: grid; place-items: center; text-align: center; font-size: 0.9rem; line-height: 1.5; padding: 12px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.steps li.hl { background: var(--mark); color: var(--mark-fg); border-color: transparent; }
+.steps li + li::before { content: "→"; position: absolute; left: -20px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 @media (max-width: 520px) {
   .steps { flex-direction: column; gap: 24px; }
   .steps li + li::before { content: "↓"; left: 50%; top: -22px; transform: translateX(-50%); }
 }
 
-.pairs { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 10px 20px; font-size: 0.95rem; }
-.pairs dt { font-weight: 700; }
+.pairs { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; }
+.pairs dt { font-weight: 600; }
 .pairs dd { margin: 0; color: var(--muted); }
 
-/* Demo: the same four steps, stacked with a rail on the left */
-.demo { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
 .track { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.stage { display: grid; grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: 28px 1fr; column-gap: 14px; }
-.dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 0.8rem; background: var(--chip); color: var(--muted); }
-.rail { grid-column: 1; grid-row: 2; justify-self: center; width: 2px; margin-block: 4px; background: var(--line); }
+.stage { display: grid; grid-template-columns: 24px minmax(0, 1fr); grid-template-rows: 28px 1fr; column-gap: 14px; }
+.dot { width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 0.75rem; border: 1px solid var(--line); color: var(--muted); }
+.rail { grid-column: 1; grid-row: 2; justify-self: center; width: 1px; margin-block: 4px; background: var(--line); }
 .stage-body { grid-row: 1 / span 2; grid-column: 2; display: flex; flex-direction: column; gap: 10px; padding-bottom: 24px; min-width: 0; }
 .stage:last-child .stage-body { padding-bottom: 0; }
 .stage:last-child .rail { display: none; }
-.stage-title { font-size: 0.85rem; font-weight: 700; color: var(--muted); line-height: 28px; }
-
-.qs { display: flex; flex-wrap: wrap; gap: 8px; }
-.qs button { font: inherit; font-size: 0.95rem; border: 1px solid var(--line); background: var(--bg); color: var(--fg); padding: 6px 14px; border-radius: 999px; cursor: pointer; }
-.qs button:hover { border-color: var(--accent); }
-.qs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.stage-title { font-size: 0.85rem; color: var(--muted); line-height: 28px; }
 
 .docs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
-.docs li { font-size: 0.88rem; line-height: 1.5; padding: 8px 10px; border-radius: 6px; border: 1px dashed var(--line); color: var(--faint); }
-.docs li.hit { background: var(--mark); color: var(--mark-fg); border: 1px solid transparent; font-weight: 700; }
+.docs li { font-size: 0.86rem; line-height: 1.5; padding: 8px 10px; border-radius: 6px; border: 1px dashed var(--line); color: var(--muted); }
+.docs li.hit { background: var(--mark); color: var(--mark-fg); border: 1px solid transparent; }
 
-.prompt { margin: 0; font-family: var(--mono); font-size: 0.82rem; line-height: 1.7; background: var(--chip); border-radius: 8px; padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+.prompt { margin: 0; font-size: 0.82rem; line-height: 1.7; background: var(--soft); border-radius: 6px; padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
 .prompt .hitline { background: var(--mark); color: var(--mark-fg); }
 
-.answer { font-size: 1rem; font-weight: 700; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--accent); }
+.answer { font-weight: 600; padding: 2px 0 2px 14px; border-left: 2px solid var(--fg); }
 
 @media (prefers-reduced-motion: no-preference) {
-  .docs li, .qs button { transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
+  .docs li { transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
 }
 </style>
 </head>
@@ -143,13 +80,13 @@ header { display: flex; flex-direction: column; gap: 8px; }
 
 <section>
   <h2>例</h2>
-  <div class="demo">
+  <div class="box">
     <ol class="track">
       <li class="stage">
         <span class="dot">1</span><span class="rail"></span>
         <div class="stage-body">
           <div class="stage-title">質問</div>
-          <div class="qs" role="group" aria-label="質問" id="qs"></div>
+          <div class="chips" role="group" aria-label="質問" id="qs"></div>
         </div>
       </li>
       <li class="stage">
